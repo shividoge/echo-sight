@@ -152,6 +152,12 @@ If echoes look smeared or missing, phone processing is the cause: move to Task 3
 - Live run checked: AudioContext at 48000 Hz; chirp counter = expected count; logged spacing exactly 7200 samples in live mode; Stop/restart works; no console errors.
 - Acceptance test 2 (spacing exact to the sample) passes on every generated train.
 
+- First real recording (2026-10-23, no speaker yet): MacBook speakers played `train_collect_10min.wav` (35 s) and an iPhone recorded it in Voice Memos Lossless (48 kHz, 24-bit, stereo). The file is `audio/recordings/test_1m_laptop*.wav` (gitignored); plots are `docs/test_1m_laptop_*.png`. Results:
+  - All 65 expected chirps were found. The marker was detected at 1500× the median level.
+  - Mac-to-iPhone clock offset is 13 ppm, which the slicer's linear fit will correct. Peak jitter is about 8 samples.
+  - The chirp only reached about 0.2–15 kHz (laptop speaker and/or iPhone processing). There was no clipping (peak 0.33).
+  - **No clear wall echo at the expected 1 m.** Mic 0 shows bumps at about 2.1 m and 3.4 m, and mic 1 a broad hump at 1.5–2 m. Likely causes: an unmeasured wall distance, table and laptop-body reflections, and the laptop speaker's long ringing. Test 3 is not ticked yet.
+
 **Implementation choices to know (not in the original spec):**
 - Downloaded/generated WAVs start with **1.0 s of silence** before the marker (Bluetooth wake-up). First chirp is at 2.5 s. The live page starts the marker 0.3 s after Start.
 - The near-silent train also starts with the (audible) session marker, so recordings can still be aligned.
