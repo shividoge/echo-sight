@@ -160,6 +160,8 @@ If echoes look smeared or missing, phone processing is the cause: move to Task 3
 - 16-bit quantization: `floor(clamp(x) × 32767 + 0.5)` in both page and script. Default gain 0.7 = page default volume.
 - Chirp scheduling uses a Worker timer (200 ms tick, 2 s lookahead) so background tabs don't starve it. iOS: sets `navigator.audioSession.type = 'playback'` to play through the mute switch.
 
+- Repo: https://github.com/shividoge/echo-sight (public; default branch `task1-conductor`, no `main` pushed yet). GitHub Pages serves that branch: the conductor is at https://shividoge.github.io/echo-sight/conductor/ (HTTPS, so it works on phones).
+
 **In progress:** nothing.
 
 **Next step:**
