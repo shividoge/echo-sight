@@ -98,8 +98,8 @@ CLI flags: `--interval`, `--minutes`, `--f0`, `--f1`, `--out`. The page and this
 
 ### Acceptance tests for Task 1
 
-- [ ] Spectrogram (Audacity) of the downloaded WAV shows the marker sweep, then evenly spaced vertical lines at the chosen interval.
-- [ ] Measured spacing between chirps in the downloaded WAV is exact to the sample.
+- [x] Spectrogram (Audacity) of the downloaded WAV shows the marker sweep, then evenly spaced vertical lines at the chosen interval. *(2026-10-23: checked with `tools/plot_spectrogram.py` because Audacity wasn't installed; see `docs/collect_spectrogram.png`.)*
+- [x] Measured spacing between chirps in the downloaded WAV is exact to the sample. *(Matched filter: 1196/1196 gaps = 24000 samples in collect, 1989/1989 = 7200 in live.)*
 - [ ] Recording the speaker with an iPhone (Voice Memos set to Lossless) shows the chirps clearly.
 - [ ] Page runs 10 minutes on a phone without stopping or drifting (chirp count matches elapsed ÷ interval).
 
@@ -165,8 +165,8 @@ If echoes look smeared or missing, phone processing is the cause: move to Task 3
 **In progress:** nothing.
 
 **Next step:**
-1. With the user, run the remaining Task 1 acceptance tests (hardware needed): (a) open a downloaded WAV in Audacity's spectrogram view; (b) play `audio/train_collect_10min.wav` (or the page) through the rig speaker and record it with iPhone Voice Memos set to Lossless; (c) serve the page over HTTPS (`conductor/README.md`) and run Collect mode for 10 min on a phone; the counter must equal the expected count at the end. Tick the boxes in section 5.
-2. Then build Task 2, `tools/check_recording.py`. Use numpy + scipy + matplotlib (none are installed on Shivin's Mac yet: `python3 -m pip install numpy scipy matplotlib soundfile`). Use `audio/chirp_3ms.wav` and `audio/marker_1s.wav` as templates. The Voice Memos recording from step 1b is the first test input.
+1. With the user, run the remaining Task 1 acceptance tests (hardware needed): (b) play `audio/train_collect_10min.wav` (or the page) through the rig speaker and record it with iPhone Voice Memos set to Lossless; (c) serve the page over HTTPS (`conductor/README.md`) and run Collect mode for 10 min on a phone; the counter must equal the expected count at the end. Tick the boxes in section 5.
+2. Then build Task 2, `tools/check_recording.py`. Use numpy + scipy + matplotlib + soundfile from the repo venv (`python3 -m venv .venv && .venv/bin/pip install numpy scipy matplotlib soundfile`; `.venv/` is gitignored). `tools/plot_spectrogram.py` already does matched-filter peak finding and can be reused. Run it on a recording with `.venv/bin/python tools/plot_spectrogram.py <file.wav> --out <png>`. Use `audio/chirp_3ms.wav` and `audio/marker_1s.wav` as templates. The Voice Memos recording from step 1b is the first test input.
 
 **Open questions for the user:**
 - Does anyone on the team have an iPhone Pro (LiDAR) and a Mac with Xcode?
@@ -179,6 +179,7 @@ Append one line per work chunk, newest last: `date time | who/which session | wh
 
 - 2026-10-23 20:46 | claude.ai planning session | created this handoff file | build Task 1
 - 2026-10-23 20:56 | Claude Code (Shivin's Mac) | created repo at ~/echo-sight (branch task1-conductor); built conductor page, make_chirp_train.py, test_chirp_match.py; page and script byte-identical | hardware acceptance tests for Task 1, then Task 2
+- 2026-10-23 21:20 | Claude Code (Shivin's Mac) | pushed to github.com/shividoge/echo-sight + Pages; added .venv and tools/plot_spectrogram.py; acceptance tests 1 and 2 pass | iPhone recording test + 10-min phone run
 
 ---
 
