@@ -140,7 +140,7 @@ If echoes look smeared or missing, phone processing is the cause: move to Task 3
 
 ## Status
 
-**Last updated:** Fri Oct 23, 2026, 8:56 PM PT (Claude Code session, Task 1 build)
+**Last updated:** Fri Oct 23, 2026, ~10 PM PT (Claude Code session, Task 2 built)
 
 **Done:**
 - Idea locked (Echo Sight). Methods researched and ranked. Implementation guide and team plan written (claude.ai docs).
@@ -159,7 +159,15 @@ If echoes look smeared or missing, phone processing is the cause: move to Task 3
   - Shivin says the laptop was about 1 m from the wall. Full-band analysis showed no clear echo there.
   - **What worked:** band-pass 2–15 kHz on both the recording and the template, matched filter, then a *coherent* average of all chirps (`docs/test_1m_laptop_coherent_2-15k.png`). Both mics then show a weak bump at about **0.85 m**, about 3 dB above the decaying ringing, at −35 to −38 dB re direct. That fits the iPhone being held in front of the laptop. There is also a strong reflection at about 2.3 m on both mics, probably the wall behind, not confirmed. The noise floor at 1–2 m is −45 to −55 dB.
   - **Lesson for Task 2 and the slicer:** below 2 kHz there was a smooth plateau at −22 to −28 dB that coherent averaging did not reduce. Probably 60 Hz mains hum: 0.5 s and 0.15 s are both whole numbers of 60 Hz cycles, so hum stays in step with the chirps. Always band-pass before ranging. The laptop speaker also rings for about 0.8 m worth of delay, which hides near echoes; a real speaker should shorten this.
-  - Test 3 is not ticked yet. To confirm, re-record at a measured 2 m: the 0.85 m bump should move to about 1.85 m.
+  - `check_recording.py` (below) on the same file: drift +13 ppm, jitter 3 samples, 1 off-grid peak rejected per mic. Mic 0 has a sharp echo at **2.15 m** that shows in every chirp; there is nothing consistent at 1 m (the 0.85 m bump is under 4× local noise). Probable cause, and a mistake in my instructions: Shivin was told to face the laptop *screen* at the wall, but MacBook speakers fire up out of the keyboard deck, so the screen shielded the wall. The 2.15 m echo is probably behind or beside the user. Plot: `docs/test_1m_laptop_check.png`.
+  - Test 3 is not ticked yet. Re-record with the keyboard/speakers facing the wall (or a phone/real speaker as the source), at a measured 1 m and then 2 m. The wall echo should move by 1 m between them.
+- Task 2: `tools/check_recording.py` does everything in section 6 except item 1's "resample" fallback order (it resamples any rate to 48 k). Reads .m4a directly via afconvert/ffmpeg; `--channel mix|all|N`. Extras beyond the spec:
+  - band-pass 2–15 kHz by default (`--band 0 0` for full band);
+  - off-grid peaks rejected (best peak per index, then iterative line fit, ±2 ms);
+  - drift from a linear fit, in ppm;
+  - a coherent average drawn above the 20 stacked chirps;
+  - first echo = first local max past `--min-dist` that is ≥4× the **local** median (0.5 m window), refined to the highest point within 0.25 m. A global noise threshold failed: after coherent averaging, the direct chirp's fading tail beat it.
+- `tools/test_check_recording.py` passes (5 tests). It builds a synthetic recording (echoes at 1.2 m and 2.9 m, 60 Hz hum, noise, +50 ppm clock, saved at 44.1 kHz) and checks marker, numbering, drift ±3 ppm, jitter <1 sample, and echo distance ±3 cm.
 
 **Implementation choices to know (not in the original spec):**
 - Downloaded/generated WAVs start with **1.0 s of silence** before the marker (Bluetooth wake-up). First chirp is at 2.5 s. The live page starts the marker 0.3 s after Start.
@@ -174,8 +182,8 @@ If echoes look smeared or missing, phone processing is the cause: move to Task 3
 **In progress:** nothing.
 
 **Next step:**
-1. With the user, run the remaining Task 1 acceptance tests (hardware needed): (b) play `audio/train_collect_10min.wav` (or the page) through the rig speaker and record it with iPhone Voice Memos set to Lossless; (c) serve the page over HTTPS (`conductor/README.md`) and run Collect mode for 10 min on a phone; the counter must equal the expected count at the end. Tick the boxes in section 5.
-2. Then build Task 2, `tools/check_recording.py`. Use numpy + scipy + matplotlib + soundfile from the repo venv (`python3 -m venv .venv && .venv/bin/pip install numpy scipy matplotlib soundfile`; `.venv/` is gitignored). `tools/plot_spectrogram.py` already does matched-filter peak finding and can be reused. Run it on a recording with `.venv/bin/python tools/plot_spectrogram.py <file.wav> --out <png>`. Use `audio/chirp_3ms.wav` and `audio/marker_1s.wav` as templates. The Voice Memos recording from step 1b is the first test input.
+1. Waiting on Shivin (deferred "for later"): (a) re-record the wall test with the speakers *facing* the wall at a measured 1 m and 2 m; (b) the 10-min Collect run on a phone at https://shividoge.github.io/echo-sight/conductor/ (counter must equal the expected count). Check each recording with `.venv/bin/python tools/check_recording.py <file.m4a> --channel all --out docs/<name>_check.png`. Pass = the wall echo sits at the measured distance and moves 1 m between recordings. Then tick tests 3–4 in section 5. Shivin has no speaker yet: MacBook speakers or a second phone are the stopgap; a small wired speaker is needed for the rig.
+2. Next code task: Task 3, the recorder web app (`recorder/index.html`, section 7). Start it while waiting for (1); its whole point is raw capture with `echoCancellation/noiseSuppression/autoGainControl: false`, which removes the question of whether Voice Memos processing hurts echoes. Host it on the same Pages site and reuse the conductor's style.
 
 **Open questions for the user:**
 - Does anyone on the team have an iPhone Pro (LiDAR) and a Mac with Xcode?
@@ -189,6 +197,7 @@ Append one line per work chunk, newest last: `date time | who/which session | wh
 - 2026-10-23 20:46 | claude.ai planning session | created this handoff file | build Task 1
 - 2026-10-23 20:56 | Claude Code (Shivin's Mac) | created repo at ~/echo-sight (branch task1-conductor); built conductor page, make_chirp_train.py, test_chirp_match.py; page and script byte-identical | hardware acceptance tests for Task 1, then Task 2
 - 2026-10-23 21:20 | Claude Code (Shivin's Mac) | pushed to github.com/shividoge/echo-sight + Pages; added .venv and tools/plot_spectrogram.py; acceptance tests 1 and 2 pass | iPhone recording test + 10-min phone run
+- 2026-10-23 22:00 | Claude Code (Shivin's Mac) | analysed first iPhone recording (chirps/timing good, no 1 m echo: speakers were shielded by the screen); built tools/check_recording.py + synthetic test (passes) | Shivin re-records later; next code task is Task 3 recorder
 
 ---
 
