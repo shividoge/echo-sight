@@ -72,10 +72,10 @@
   <div class="row">
     <label for="mode">Mode</label>
     <select id="mode">
-      <option value="collect">Collect: marker, then chirp every 0.5 s</option>
-      <option value="live">Live: marker, then chirp every 0.15 s</option>
-      <option value="near">Near-silent range: 17–20 kHz every 0.15 s</option>
-      <option value="single">Single: one chirp per tap</option>
+      <option value="collect">Collect · every 0.5 s</option>
+      <option value="live">Live · every 0.15 s</option>
+      <option value="near">Near-silent 17–20 kHz · 0.15 s</option>
+      <option value="single">Single · one chirp per tap</option>
     </select>
   </div>
   <div class="row">
@@ -273,6 +273,7 @@ async function start() {
   ticker = startTicker(tick);
   requestWakeLock();
   setRunning(true);
+  requestAnimationFrame(render);
 }
 
 function tick() {
@@ -343,9 +344,14 @@ function render() {
     $('count').textContent = played;
     $('elapsed').textContent = fmtTime(now - run.t0);
     $('expected').textContent = now >= tFirst ? Math.floor((now - tFirst) / step + 1e-9) + 1 : 0;
-    renderLogTail(run.log);
+    renderLogTail(playedLog(run.log, now));
   }
   if (run && !run.stopped) requestAnimationFrame(render);
+}
+
+// The log holds chirps scheduled up to LOOKAHEAD_S ahead; only show or copy the ones already played.
+function playedLog(log, now) {
+  return { ...log, chirps: log.chirps.filter((c) => c.audio_time_s <= now) };
 }
 
 function renderLogTail(log) {
@@ -374,7 +380,7 @@ function showVolume() {
 }
 
 async function copyLog() {
-  const log = run ? run.log : lastLog;
+  const log = run && !run.stopped ? playedLog(run.log, ctx.currentTime) : lastLog;
   if (!log) return;
   const text = JSON.stringify(log, null, 1);
   $('copyFallback').innerHTML = '';
@@ -463,7 +469,6 @@ $('exportJson').addEventListener('click', exportJson);
 $('mode').addEventListener('change', showMode);
 $('interval').addEventListener('input', showMode);
 $('volume').addEventListener('input', showVolume);
-$('start').addEventListener('click', () => requestAnimationFrame(render));
 showMode();
 showVolume();
 </script>

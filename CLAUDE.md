@@ -140,15 +140,31 @@ If echoes look smeared or missing, phone processing is the cause: move to Task 3
 
 ## Status
 
-**Last updated:** Fri Oct 23, 2026, 8:46 PM PT (planning session on claude.ai)
+**Last updated:** Fri Oct 23, 2026, 8:56 PM PT (Claude Code session, Task 1 build)
 
 **Done:**
 - Idea locked (Echo Sight). Methods researched and ranked. Implementation guide and team plan written (claude.ai docs).
 - Teammate on GX10s started with STARSS23; redirected to VisualEchoes + Beyond Image to Depth weights.
+- Task 1a: `conductor/index.html` (all 9 features) + `conductor/README.md` (how to serve and tunnel).
+- Task 1b: `tools/make_chirp_train.py`, standard library only (no numpy needed). It writes `audio/chirp_3ms.wav`, `chirp_nearsilent_3ms.wav`, `marker_1s.wav`, the three trains, and `train_*_times.csv`. `audio/` is gitignored except `chirp_3ms.wav`; rerun the script to regenerate.
+- `tools/test_chirp_match.py` passes. It runs the page's `// BEGIN DSP … // END DSP` block in Node and checks chirp, near-silent chirp, marker, train layout and 16-bit quantization against the script: 0 samples differ. `--page-wav` / `--page-json` check real page downloads.
+- Verified in a browser: the page's OfflineAudioContext WAV is byte-identical to the Python file for collect/live/near-silent, a custom 0.123 s interval at 95% volume, and the full 10-min collect train (10 s render on a laptop).
+- Live run checked: AudioContext at 48000 Hz; chirp counter = expected count; logged spacing exactly 7200 samples in live mode; Stop/restart works; no console errors.
+- Acceptance test 2 (spacing exact to the sample) passes on every generated train.
 
-**In progress:** nothing in code yet.
+**Implementation choices to know (not in the original spec):**
+- Downloaded/generated WAVs start with **1.0 s of silence** before the marker (Bluetooth wake-up). First chirp is at 2.5 s. The live page starts the marker 0.3 s after Start.
+- The near-silent train also starts with the (audible) session marker, so recordings can still be aligned.
+- Fade = `round(0.05 × N)` samples (7 for the 144-sample chirp), `w = 0.5(1 − cos(π i / fade))`; the first and last samples are 0.
+- Intervals are rounded to whole samples at 48 kHz, and every chirp time is `first + k × step`, so there is no drift.
+- 16-bit quantization: `floor(clamp(x) × 32767 + 0.5)` in both page and script. Default gain 0.7 = page default volume.
+- Chirp scheduling uses a Worker timer (200 ms tick, 2 s lookahead) so background tabs don't starve it. iOS: sets `navigator.audioSession.type = 'playback'` to play through the mute switch.
 
-**Next step:** Build Task 1 (1a conductor page + 1b `make_chirp_train.py`), then run its acceptance tests with the user. Then Task 2.
+**In progress:** nothing.
+
+**Next step:**
+1. With the user, run the remaining Task 1 acceptance tests (hardware needed): (a) open a downloaded WAV in Audacity's spectrogram view; (b) play `audio/train_collect_10min.wav` (or the page) through the rig speaker and record it with iPhone Voice Memos set to Lossless; (c) serve the page over HTTPS (`conductor/README.md`) and run Collect mode for 10 min on a phone; the counter must equal the expected count at the end. Tick the boxes in section 5.
+2. Then build Task 2, `tools/check_recording.py`. Use numpy + scipy + matplotlib (none are installed on Shivin's Mac yet: `python3 -m pip install numpy scipy matplotlib soundfile`). Use `audio/chirp_3ms.wav` and `audio/marker_1s.wav` as templates. The Voice Memos recording from step 1b is the first test input.
 
 **Open questions for the user:**
 - Does anyone on the team have an iPhone Pro (LiDAR) and a Mac with Xcode?
@@ -160,6 +176,7 @@ If echoes look smeared or missing, phone processing is the cause: move to Task 3
 Append one line per work chunk, newest last: `date time | who/which session | what changed | what's next`.
 
 - 2026-10-23 20:46 | claude.ai planning session | created this handoff file | build Task 1
+- 2026-10-23 20:56 | Claude Code (Shivin's Mac) | created repo at ~/echo-sight (branch task1-conductor); built conductor page, make_chirp_train.py, test_chirp_match.py; page and script byte-identical | hardware acceptance tests for Task 1, then Task 2
 
 ---
 
