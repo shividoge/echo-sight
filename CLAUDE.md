@@ -156,7 +156,10 @@ If echoes look smeared or missing, phone processing is the cause: move to Task 3
   - All 65 expected chirps were found. The marker was detected at 1500× the median level.
   - Mac-to-iPhone clock offset is 13 ppm, which the slicer's linear fit will correct. Peak jitter is about 8 samples.
   - The chirp only reached about 0.2–15 kHz (laptop speaker and/or iPhone processing). There was no clipping (peak 0.33).
-  - **No clear wall echo at the expected 1 m.** Mic 0 shows bumps at about 2.1 m and 3.4 m, and mic 1 a broad hump at 1.5–2 m. Likely causes: an unmeasured wall distance, table and laptop-body reflections, and the laptop speaker's long ringing. Test 3 is not ticked yet.
+  - Shivin says the laptop was about 1 m from the wall. Full-band analysis showed no clear echo there.
+  - **What worked:** band-pass 2–15 kHz on both the recording and the template, matched filter, then a *coherent* average of all chirps (`docs/test_1m_laptop_coherent_2-15k.png`). Both mics then show a weak bump at about **0.85 m**, about 3 dB above the decaying ringing, at −35 to −38 dB re direct. That fits the iPhone being held in front of the laptop. There is also a strong reflection at about 2.3 m on both mics, probably the wall behind, not confirmed. The noise floor at 1–2 m is −45 to −55 dB.
+  - **Lesson for Task 2 and the slicer:** below 2 kHz there was a smooth plateau at −22 to −28 dB that coherent averaging did not reduce. Probably 60 Hz mains hum: 0.5 s and 0.15 s are both whole numbers of 60 Hz cycles, so hum stays in step with the chirps. Always band-pass before ranging. The laptop speaker also rings for about 0.8 m worth of delay, which hides near echoes; a real speaker should shorten this.
+  - Test 3 is not ticked yet. To confirm, re-record at a measured 2 m: the 0.85 m bump should move to about 1.85 m.
 
 **Implementation choices to know (not in the original spec):**
 - Downloaded/generated WAVs start with **1.0 s of silence** before the marker (Bluetooth wake-up). First chirp is at 2.5 s. The live page starts the marker 0.3 s after Start.
