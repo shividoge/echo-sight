@@ -1,0 +1,5 @@
+audio/*
+!audio/chirp_3ms.wav
+__pycache__/
+.DS_Store
+*.pyc
