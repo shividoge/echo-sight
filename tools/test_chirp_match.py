@@ -23,6 +23,7 @@ import make_chirp_train as mct  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PAGE = os.path.join(ROOT, "conductor", "index.html")
+COPIES = [os.path.join(ROOT, "recorder", "index.html")]  # pages carrying a copy of the conductor's DSP block
 MODES = {"collect": ("collect", mct.CHIRP), "live": ("live", mct.CHIRP), "near": ("nearsilent", mct.NEAR)}
 
 failures = []
@@ -43,13 +44,17 @@ def compare(name, page, py):
     check(not diffs, "%s: %d samples, %d differ (max diff %.3g)" % (name, len(py), len(diffs), worst))
 
 
+def dsp_block(path):
+    m = re.search(r"// BEGIN DSP.*?\n(.*?)// END DSP", open(path, encoding="utf-8").read(), re.S)
+    return m.group(1) if m else None
+
+
 def page_dsp_via_node():
-    src = open(PAGE, encoding="utf-8").read()
-    m = re.search(r"// BEGIN DSP.*?\n(.*?)// END DSP", src, re.S)
-    if not m:
+    block = dsp_block(PAGE)
+    if block is None:
         check(False, "could not find the BEGIN DSP / END DSP block in conductor/index.html")
         return None
-    js = m.group(1) + """
+    js = block + """
 const layouts = [[0.5, 144, true, 1.0, 10], [0.15, 144, true, 1.0, 5], [0.25, 144, true, 1.0, 0.1], [0.123, 144, false, 0.0, 0.05]]
   .map(([intervalS, chirpLen, marker, leadS, minutes]) => trainLayout({ intervalS, chirpLen, marker, leadS, minutes }));
 const q = [-1.5, -1, -0.5, -1e-5, 0, 1e-5, 0.49999, 0.5, 1, 1.5].map(toInt16);
@@ -104,6 +109,10 @@ def main():
     a = ap.parse_args()
 
     py = {"chirp": mct.sweep(*mct.CHIRP), "near": mct.sweep(*mct.NEAR), "marker": mct.sweep(*mct.MARKER)}
+
+    for path in COPIES:
+        if os.path.exists(path):
+            check(dsp_block(path) == dsp_block(PAGE), "%s DSP block is identical to the conductor's" % os.path.relpath(path, ROOT))
 
     if shutil.which("node"):
         js = page_dsp_via_node()

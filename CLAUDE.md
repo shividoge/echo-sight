@@ -167,6 +167,15 @@ If echoes look smeared or missing, phone processing is the cause: move to Task 3
   - drift from a linear fit, in ppm;
   - a coherent average drawn above the 20 stacked chirps;
   - first echo = first local max past `--min-dist` that is ≥4× the **local** median (0.5 m window), refined to the highest point within 0.25 m. A global noise threshold failed: after coherent averaging, the direct chirp's fading tail beat it.
+- Task 3 (first version): `recorder/index.html` + `recorder/README.md`. Live at https://shividoge.github.io/echo-sight/recorder/, and the site root `index.html` links both tools.
+  - Capture: getUserMedia with EC/NS/AGC off, AudioContext at 48 kHz, an AudioWorklet (Blob URL; ScriptProcessor fallback) that mixes to mono and sends 4096-sample blocks, quantized to Int16 as they arrive.
+  - Display: level meter with peak hold, a clip counter, and the actual track settings (warns if any processing stayed on).
+  - Output: role selector + session name (remembered), file named `<session>_<role>.wav`, Save and Web Share (AirDrop) buttons, wake lock.
+  - After Stop, an in-page chirp check matched-filters the first 60 s and reports the chirp count and typical spacing.
+  - It carries an identical copy of the conductor's DSP block; `test_chirp_match.py` now checks the copies stay identical.
+  - **Verified** in the browser with a fake microphone, a MediaStreamDestination playing a 12 s collect train, because the browser pane blocks the real mic: all 21 chirps captured, every gap exactly 24000 samples, peak −6.0 dB as fed in, valid 48 kHz/16-bit/mono WAV. The "Permission denied" error path also works.
+  - **Not yet verified on a real phone mic.** In particular, we don't yet know whether iOS Safari really honours EC/NS/AGC off (the page shows what was granted).
+  - Not done yet: the live-streaming client (WebSocket per section 3), planned for Sunday.
 - `tools/test_check_recording.py` passes (5 tests). It builds a synthetic recording (echoes at 1.2 m and 2.9 m, 60 Hz hum, noise, +50 ppm clock, saved at 44.1 kHz) and checks marker, numbering, drift ±3 ppm, jitter <1 sample, and echo distance ±3 cm.
 
 **Implementation choices to know (not in the original spec):**
@@ -183,7 +192,8 @@ If echoes look smeared or missing, phone processing is the cause: move to Task 3
 
 **Next step:**
 1. Waiting on Shivin (deferred "for later"): (a) re-record the wall test with the speakers *facing* the wall at a measured 1 m and 2 m; (b) the 10-min Collect run on a phone at https://shividoge.github.io/echo-sight/conductor/ (counter must equal the expected count). Check each recording with `.venv/bin/python tools/check_recording.py <file.m4a> --channel all --out docs/<name>_check.png`. Pass = the wall echo sits at the measured distance and moves 1 m between recordings. Then tick tests 3–4 in section 5. Shivin has no speaker yet: MacBook speakers or a second phone are the stopgap; a small wired speaker is needed for the rig.
-2. Next code task: Task 3, the recorder web app (`recorder/index.html`, section 7). Start it while waiting for (1); its whole point is raw capture with `echoCancellation/noiseSuppression/autoGainControl: false`, which removes the question of whether Voice Memos processing hurts echoes. Host it on the same Pages site and reuse the conductor's style.
+2. Shivin tries the recorder on the iPhone: open https://shividoge.github.io/echo-sight/recorder/, press Record, play the conductor from the Mac or a second phone, then Stop. Report what the "Echo cancel · noise · gain" box says, and AirDrop the WAV. Run `check_recording.py` on it and compare with the Voice Memos take.
+3. Next code task after that: Task 4, the slicer (section 7). Reuse `check_recording.py`'s `load`, `bandpass`, `matched`, `find_marker` and `on_grid` for chirp finding and the drift fit, then cut 72.5 ms windows into the training-sample layout from section 3.
 
 **Open questions for the user:**
 - Does anyone on the team have an iPhone Pro (LiDAR) and a Mac with Xcode?
@@ -198,6 +208,7 @@ Append one line per work chunk, newest last: `date time | who/which session | wh
 - 2026-10-23 20:56 | Claude Code (Shivin's Mac) | created repo at ~/echo-sight (branch task1-conductor); built conductor page, make_chirp_train.py, test_chirp_match.py; page and script byte-identical | hardware acceptance tests for Task 1, then Task 2
 - 2026-10-23 21:20 | Claude Code (Shivin's Mac) | pushed to github.com/shividoge/echo-sight + Pages; added .venv and tools/plot_spectrogram.py; acceptance tests 1 and 2 pass | iPhone recording test + 10-min phone run
 - 2026-10-23 22:00 | Claude Code (Shivin's Mac) | analysed first iPhone recording (chirps/timing good, no 1 m echo: speakers were shielded by the screen); built tools/check_recording.py + synthetic test (passes) | Shivin re-records later; next code task is Task 3 recorder
+- 2026-10-23 22:00 | Claude Code (Shivin's Mac) | built recorder/ (Task 3 v1) + root index.html; verified with a fake mic; match test covers the recorder's DSP copy | Shivin tests recorder on iPhone; then Task 4 slicer
 
 ---
 

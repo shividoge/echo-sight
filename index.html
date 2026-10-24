@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>Echo Sight</title>
+<style>
+  :root { --bg: #0e1116; --panel: #171b22; --line: #2a303a; --text: #e8ebf0; --muted: #9aa3b0; --accent: #4cc2ff; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f6f7f9; --panel: #ffffff; --line: #d9dde3; --text: #12161c; --muted: #5b6573; --accent: #0a74b8; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 18px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         padding: max(16px, env(safe-area-inset-top)) 16px 32px; max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 30px; margin: 8px 0 4px; }
+  p { color: var(--muted); margin: 0 0 18px; }
+  a.tool { display: block; text-decoration: none; color: var(--text); background: var(--panel); border: 1px solid var(--line);
+           border-radius: 14px; padding: 18px 16px; margin-bottom: 14px; }
+  a.tool b { display: block; font-size: 23px; color: var(--accent); margin-bottom: 4px; }
+  a.tool span { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<h1>Echo Sight</h1>
+<p>See a room by listening to it, like a bat.</p>
+<a class="tool" href="conductor/"><b>Conductor</b><span>Plays the chirp train. Run it on the phone or laptop driving the speaker.</span></a>
+<a class="tool" href="recorder/"><b>Recorder</b><span>Raw microphone capture to 48 kHz WAV. Run it on the left, right and camera phones.</span></a>
+</body>
+</html>

@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>Echo Sight Recorder</title>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #171b22; --line: #2a303a; --text: #e8ebf0; --muted: #9aa3b0;
+    --accent: #4cc2ff; --go: #2fbf71; --stop: #e5484d; --warn: #f5a524;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f6f7f9; --panel: #ffffff; --line: #d9dde3; --text: #12161c; --muted: #5b6573;
+            --accent: #0a74b8; --go: #1d8f52; --stop: #c62f34; --warn: #a86400; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 18px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         padding: max(16px, env(safe-area-inset-top)) 16px 32px; max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 23px; margin: 0 0 12px; letter-spacing: .02em; }
+  h1 span { color: var(--muted); font-weight: 400; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+  .clock { font: 700 clamp(56px, 20vw, 110px)/1 ui-monospace, "SF Mono", Menlo, monospace; text-align: center; font-variant-numeric: tabular-nums; }
+  .clock-label { text-align: center; color: var(--muted); margin-top: 4px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-top: 14px; }
+  .stat b { display: block; font: 600 23px/1.2 ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+  .stat small { color: var(--muted); font-size: 14px; }
+  label { display: block; color: var(--muted); font-size: 14px; margin-bottom: 6px; }
+  .row { margin-bottom: 14px; }
+  .row:last-child { margin-bottom: 0; }
+  select, input[type=text] { width: 100%; font: inherit; color: var(--text); background: var(--bg);
+         border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-height: 52px; }
+  .meter { position: relative; height: 28px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; margin-top: 14px; }
+  .meter i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--go); }
+  .meter i.hot { background: var(--warn); }
+  .meter i.clip { background: var(--stop); }
+  .meter b { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); left: 0; }
+  .meter-scale { display: flex; justify-content: space-between; color: var(--muted); font-size: 14px; margin-top: 4px; }
+  .warn { color: var(--warn); font-size: 14px; margin-top: 8px; }
+  .warn:empty { display: none; }
+  button { font: 600 18px/1 system-ui, sans-serif; border: 0; border-radius: 14px; min-height: 64px; width: 100%;
+           color: #fff; background: var(--accent); cursor: pointer; touch-action: manipulation; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.go { background: var(--go); font-size: 30px; min-height: 84px; }
+  button.stop { background: var(--stop); font-size: 30px; min-height: 84px; }
+  button.quiet { background: transparent; color: var(--text); border: 1px solid var(--line); font-size: 18px; min-height: 52px; }
+  .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .hidden { display: none !important; }
+  .status { color: var(--muted); font-size: 14px; margin-top: 8px; min-height: 1.4em; }
+  .bad { color: var(--stop); }
+  .ok { color: var(--go); }
+</style>
+</head>
+<body>
+<h1>Echo Sight <span>· raw recorder</span></h1>
+
+<div class="panel">
+  <div class="row">
+    <label for="role">This phone is the</label>
+    <select id="role">
+      <option value="left">Left ear</option>
+      <option value="right">Right ear</option>
+      <option value="camera">Camera</option>
+    </select>
+  </div>
+  <div class="row">
+    <label for="session">Session name (same on every phone)</label>
+    <input type="text" id="session" autocomplete="off" autocapitalize="off" spellcheck="false">
+  </div>
+  <div class="buttons">
+    <button class="go" id="record">Record</button>
+    <button class="stop" id="stop" disabled>Stop</button>
+  </div>
+  <div class="status" id="micStatus">Start this before the conductor's Start. Keep this screen open while recording.</div>
+</div>
+
+<div class="panel">
+  <div class="clock" id="clock">0:00.0</div>
+  <div class="clock-label" id="clockLabel">not recording</div>
+  <div class="meter"><i id="meterBar"></i><b id="meterHold"></b></div>
+  <div class="meter-scale"><span>−60 dB</span><span>−30</span><span>−12</span><span>0 dBFS</span></div>
+  <div class="warn" id="clipWarn"></div>
+  <div class="stats">
+    <div class="stat"><small>Sample rate</small><b id="rate">–</b></div>
+    <div class="stat"><small>Peak (whole take)</small><b id="peak">–</b></div>
+    <div class="stat"><small>Echo cancel · noise · gain</small><b id="proc">–</b></div>
+    <div class="stat"><small>Mic channels</small><b id="chans">–</b></div>
+  </div>
+</div>
+
+<div class="panel hidden" id="result">
+  <label>Last take</label>
+  <div class="stat"><b id="fileName">–</b></div>
+  <div class="status" id="fileInfo"></div>
+  <div class="status" id="chirpInfo"></div>
+  <div class="buttons" style="margin-top:12px">
+    <button class="quiet" id="save">Save WAV</button>
+    <button class="quiet hidden" id="share">Share / AirDrop</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// BEGIN DSP — must match tools/make_chirp_train.py sample for sample (tools/test_chirp_match.py checks it).
+const FS = 48000;
+const FADE_FRAC = 0.05;
+const CHIRP = { f0: 20, f1: 20000, dur: 0.003 };
+const NEAR = { f0: 17000, f1: 20000, dur: 0.003 };
+const MARKER = { f0: 200, f1: 8000, dur: 1.0 };
+const MARKER_GAP_S = 0.5;
+const LEAD_S = 1.0; // silence before the marker in downloaded WAVs (lets Bluetooth speakers wake up)
+
+// Linear sweep x[n] = sin(2π(f0·t + (f1−f0)/(2T)·t²)) with a raised-cosine fade over FADE_FRAC of each end.
+function sweep(f0, f1, dur) {
+  const n = Math.round(dur * FS);
+  const fade = Math.round(FADE_FRAC * n);
+  const k = (f1 - f0) / (2 * dur);
+  const x = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const t = i / FS;
+    let v = Math.sin(2 * Math.PI * (f0 * t + k * t * t));
+    if (i < fade) v *= 0.5 * (1 - Math.cos(Math.PI * i / fade));
+    else if (i >= n - fade) v *= 0.5 * (1 - Math.cos(Math.PI * (n - 1 - i) / fade));
+    x[i] = v;
+  }
+  return x;
+}
+
+// Sample positions (at FS) of everything in a train. Times are offsets from the train start,
+// so the spacing is a whole number of samples and never accumulates rounding error.
+function trainLayout({ intervalS, chirpLen, marker, leadS, minutes }) {
+  const step = Math.round(intervalS * FS);
+  const lead = Math.round(leadS * FS);
+  const markerLen = marker ? Math.round(MARKER.dur * FS) : 0;
+  const gap = marker ? Math.round(MARKER_GAP_S * FS) : 0;
+  const first = lead + markerLen + gap;
+  const total = minutes == null ? Infinity : Math.round((leadS + minutes * 60) * FS);
+  const chirpStarts = [];
+  if (total !== Infinity) for (let s = first; s + chirpLen <= total; s += step) chirpStarts.push(s);
+  return { step, total, markerStart: marker ? lead : null, first, chirpStarts };
+}
+
+// 16-bit PCM quantization used for every WAV (same rule in Python).
+function toInt16(v) {
+  return Math.floor(Math.max(-1, Math.min(1, v)) * 32767 + 0.5);
+}
+// END DSP
+
+// Raw capture: the phone's voice processing (echo cancel, noise suppression, auto gain) would
+// smear or remove the echoes, so all three are off. Settings actually granted are shown on screen.
+const MIC_CONSTRAINTS = {
+  audio: {
+    echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+    channelCount: { ideal: 1 }, sampleRate: { ideal: FS },
+  },
+};
+const CHUNK = 4096;
+const CHECK_SECONDS = 60; // chirp check after Stop looks at the first minute only
+
+// Runs on the audio thread: mixes input channels to mono, ships CHUNK-sample blocks plus their peak.
+const WORKLET_SRC = `
+class Capture extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.buf = new Float32Array(${CHUNK}); this.n = 0; this.peak = 0;
+    this.port.onmessage = () => this.flush();
+  }
+  flush() {
+    this.port.postMessage({ samples: this.buf.slice(0, this.n), peak: this.peak, flushed: true });
+    this.n = 0; this.peak = 0;
+  }
+  process(inputs) {
+    const inp = inputs[0];
+    if (!inp || !inp.length) return true;
+    const C = inp.length, L = inp[0].length;
+    for (let i = 0; i < L; i++) {
+      let v = 0;
+      for (let c = 0; c < C; c++) v += inp[c][i];
+      v /= C;
+      this.buf[this.n++] = v;
+      const a = v < 0 ? -v : v;
+      if (a > this.peak) this.peak = a;
+      if (this.n === ${CHUNK}) {
+        this.port.postMessage({ samples: this.buf, peak: this.peak }, [this.buf.buffer]);
+        this.buf = new Float32Array(${CHUNK}); this.n = 0; this.peak = 0;
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('capture', Capture);
+`;
+
+const $ = (id) => document.getElementById(id);
+let ctx = null, rec = null, wakeLock = null, take = null;
+
+function store(key, val) { try { localStorage.setItem('echosight.' + key, val); } catch (e) {} }
+function recall(key) { try { return localStorage.getItem('echosight.' + key); } catch (e) { return null; } }
+
+function defaultSession() {
+  const d = new Date(), p = (n) => String(n).padStart(2, '0');
+  return `s${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+}
+function cleanSession(s) { return s.trim().replace(/[^A-Za-z0-9_-]+/g, '-') || defaultSession(); }
+
+async function record() {
+  $('record').disabled = true;
+  $('micStatus').textContent = 'Asking for the microphone…';
+  $('micStatus').className = 'status';
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
+    if (!ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      try { ctx = new AC({ sampleRate: FS }); } catch (e) { ctx = new AC(); }
+      if (ctx.audioWorklet) {
+        const url = URL.createObjectURL(new Blob([WORKLET_SRC], { type: 'text/javascript' }));
+        await ctx.audioWorklet.addModule(url);
+        URL.revokeObjectURL(url);
+      }
+    }
+    if (ctx.state !== 'running') await ctx.resume();
+
+    const track = stream.getAudioTracks()[0];
+    const s = track.getSettings ? track.getSettings() : {};
+    showSettings(s);
+
+    const src = ctx.createMediaStreamSource(stream);
+    const sink = ctx.createGain();
+    sink.gain.value = 0; // keeps the graph pulled without playing the mic back
+    sink.connect(ctx.destination);
+    rec = { stream, src, sink, chunks: [], n: 0, peak: 0, holdPeak: 0, holdAt: 0, levelPeak: 0, clips: 0,
+            startedAt: ctx.currentTime, session: cleanSession($('session').value), role: $('role').value };
+    $('session').value = rec.session;
+    store('session', rec.session);
+    store('role', rec.role);
+
+    if (ctx.audioWorklet) {
+      rec.node = new AudioWorkletNode(ctx, 'capture', { numberOfInputs: 1, numberOfOutputs: 1, channelCountMode: 'explicit', channelCount: Math.max(1, s.channelCount || 1) });
+      rec.node.port.onmessage = (e) => onChunk(e.data);
+    } else {
+      // Old browsers without AudioWorklet.
+      rec.node = ctx.createScriptProcessor(CHUNK, 1, 1);
+      rec.node.onaudioprocess = (e) => {
+        const x = e.inputBuffer.getChannelData(0);
+        let peak = 0;
+        for (let i = 0; i < x.length; i++) peak = Math.max(peak, Math.abs(x[i]));
+        onChunk({ samples: new Float32Array(x), peak });
+      };
+    }
+    src.connect(rec.node);
+    rec.node.connect(sink);
+
+    track.onended = () => { if (rec) { $('micStatus').textContent = 'The microphone was taken away (another app?). Recording stopped.'; $('micStatus').className = 'status bad'; stop(); } };
+    try { wakeLock = await navigator.wakeLock.request('screen'); } catch (e) { wakeLock = null; }
+    $('stop').disabled = false;
+    $('role').disabled = $('session').disabled = true;
+    $('micStatus').textContent = `Recording as ${rec.session}_${rec.role}.wav. Now start the conductor.`;
+    requestAnimationFrame(render);
+  } catch (e) {
+    $('micStatus').textContent = 'Microphone failed: ' + e.message + (window.isSecureContext ? '' : ' (this page must be opened over https)');
+    $('micStatus').className = 'status bad';
+    $('record').disabled = false;
+  }
+}
+
+function showSettings(s) {
+  const flag = (v) => (v === undefined ? '?' : v ? 'ON' : 'off');
+  $('proc').textContent = [s.echoCancellation, s.noiseSuppression, s.autoGainControl].map(flag).join(' · ');
+  const anyOn = s.echoCancellation || s.noiseSuppression || s.autoGainControl;
+  $('proc').className = anyOn ? 'bad' : '';
+  $('chans').textContent = s.channelCount || '?';
+  $('rate').textContent = ctx.sampleRate + ' Hz';
+  $('rate').className = ctx.sampleRate === FS ? '' : 'bad';
+  if (anyOn) $('clipWarn').textContent = 'This browser kept some voice processing on. Echoes may be damaged; try Chrome, or the native app later.';
+}
+
+function onChunk({ samples, peak }) {
+  if (!rec) return;
+  const q = new Int16Array(samples.length);
+  for (let i = 0; i < samples.length; i++) q[i] = toInt16(samples[i]);
+  rec.chunks.push(q);
+  rec.n += samples.length;
+  rec.peak = Math.max(rec.peak, peak);
+  rec.levelPeak = Math.max(rec.levelPeak, peak);
+  if (peak >= 0.999) rec.clips++;
+}
+
+function dB(v) { return v > 0 ? 20 * Math.log10(v) : -Infinity; }
+function fmtTime(s) { const m = Math.floor(s / 60); return m + ':' + (s - m * 60).toFixed(1).padStart(4, '0'); }
+function meterPos(v) { return Math.max(0, Math.min(1, (dB(v) + 60) / 60)); }
+
+function render() {
+  if (!rec) return;
+  const now = performance.now();
+  const lvl = rec.levelPeak; rec.levelPeak = 0;
+  if (lvl >= rec.holdPeak || now - rec.holdAt > 1500) { rec.holdPeak = lvl; rec.holdAt = now; }
+  const bar = $('meterBar');
+  bar.style.width = (meterPos(lvl) * 100) + '%';
+  bar.className = lvl >= 0.999 ? 'clip' : lvl > 0.25 ? 'hot' : '';
+  $('meterHold').style.left = 'calc(' + (meterPos(rec.holdPeak) * 100) + '% - 2px)';
+  $('clock').textContent = fmtTime(rec.n / ctx.sampleRate);
+  $('clockLabel').textContent = `${(rec.n / 1e6).toFixed(2)} M samples`;
+  $('peak').textContent = rec.peak ? dB(rec.peak).toFixed(1) + ' dB' : '–';
+  $('clipWarn').textContent = rec.clips ? `Clipped ${rec.clips}× — move the phone away from the speaker or turn the conductor down.` : $('clipWarn').textContent;
+  requestAnimationFrame(render);
+}
+
+function stop() {
+  if (!rec) return;
+  const r = rec;
+  const finish = () => {
+    r.src.disconnect();
+    r.node.disconnect();
+    r.sink.disconnect();
+    r.stream.getTracks().forEach((t) => t.stop());
+    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+    rec = null;
+    buildTake(r);
+  };
+  if (r.node.port) {
+    r.node.port.onmessage = (e) => { onChunkFor(r, e.data); if (e.data.flushed) finish(); };
+    r.node.port.postMessage('flush');
+  } else {
+    finish();
+  }
+  $('stop').disabled = true;
+}
+function onChunkFor(r, d) { const keep = rec; rec = r; onChunk(d); rec = keep; }
+
+function buildTake(r) {
+  const samples = new Int16Array(r.n);
+  let o = 0;
+  for (const c of r.chunks) { samples.set(c, o); o += c.length; }
+  const rate = ctx.sampleRate;
+  const blob = encodeWav(samples, rate);
+  const name = `${r.session}_${r.role}.wav`;
+  take = { blob, name, file: new File([blob], name, { type: 'audio/wav' }) };
+  $('result').classList.remove('hidden');
+  $('fileName').textContent = name;
+  $('fileInfo').textContent = `${fmtTime(r.n / rate)} · ${rate} Hz · ${(blob.size / 1e6).toFixed(1)} MB · peak ${dB(r.peak).toFixed(1)} dBFS${r.clips ? ` · clipped ${r.clips}×` : ''}`;
+  $('share').classList.toggle('hidden', !(navigator.canShare && navigator.canShare({ files: [take.file] })));
+  $('record').disabled = false;
+  $('role').disabled = $('session').disabled = false;
+  $('clock').textContent = fmtTime(r.n / rate);
+  $('clockLabel').textContent = 'stopped';
+  $('micStatus').textContent = 'Saved in memory. Save or share it before recording again.';
+  $('micStatus').className = 'status';
+  setTimeout(() => checkChirps(samples, rate), 50);
+}
+
+// Quick sanity check: matched filter against the chirp, count peaks, measure their spacing.
+function checkChirps(samples, rate) {
+  if (rate !== FS) { $('chirpInfo').textContent = 'Chirp check skipped (sample rate is not 48 kHz).'; return; }
+  const n = Math.min(samples.length, CHECK_SECONDS * FS);
+  const tpl = sweep(CHIRP.f0, CHIRP.f1, CHIRP.dur);
+  const m = tpl.length;
+  if (n < m * 2) return;
+  const out = new Float32Array(n - m);
+  let max = 0;
+  for (let i = 0; i < out.length; i++) {
+    let acc = 0;
+    for (let j = 0; j < m; j++) acc += samples[i + j] * tpl[j];
+    const a = Math.abs(acc);
+    out[i] = a;
+    if (a > max) max = a;
+  }
+  const minGap = Math.round(0.1 * FS), peaks = [];
+  for (let i = 1; i < out.length - 1; i++) {
+    if (out[i] < 0.3 * max || out[i] < out[i - 1] || out[i] < out[i + 1]) continue;
+    if (peaks.length && i - peaks[peaks.length - 1] < minGap) {
+      if (out[i] > out[peaks[peaks.length - 1]]) peaks[peaks.length - 1] = i;
+    } else peaks.push(i);
+  }
+  const gaps = peaks.slice(1).map((p, i) => p - peaks[i]).sort((a, b) => a - b);
+  const med = gaps.length ? gaps[gaps.length >> 1] : 0;
+  const el = $('chirpInfo');
+  if (peaks.length < 3) {
+    el.textContent = `Chirp check: only ${peaks.length} chirp-like peaks in the first ${Math.round(n / FS)} s. Was the conductor playing?`;
+    el.className = 'status bad';
+    return;
+  }
+  el.textContent = `Chirp check: ${peaks.length} chirps in the first ${Math.round(n / FS)} s, typical spacing ${med} samples (${(med / FS).toFixed(4)} s).`;
+  el.className = 'status ok';
+  window.lastCheck = { peaks, med }; // for debugging from the console
+}
+
+function encodeWav(samples, rate) {
+  const dv = new DataView(new ArrayBuffer(44 + samples.length * 2));
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, 'RIFF'); dv.setUint32(4, 36 + samples.length * 2, true); str(8, 'WAVE');
+  str(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+  str(36, 'data'); dv.setUint32(40, samples.length * 2, true);
+  for (let i = 0, o = 44; i < samples.length; i++, o += 2) dv.setInt16(o, samples[i], true);
+  return new Blob([dv.buffer], { type: 'audio/wav' });
+}
+
+function save() {
+  if (!take) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(take.blob);
+  a.download = take.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+async function share() {
+  if (!take) return;
+  try { await navigator.share({ files: [take.file], title: take.name }); } catch (e) {}
+}
+
+window.addEventListener('beforeunload', (e) => { if (rec || take) { e.preventDefault(); e.returnValue = ''; } });
+document.addEventListener('visibilitychange', async () => {
+  if (rec && document.visibilityState === 'visible' && !wakeLock) { try { wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {} }
+});
+
+$('role').value = recall('role') || 'left';
+$('session').value = recall('session') || defaultSession();
+$('record').addEventListener('click', record);
+$('stop').addEventListener('click', stop);
+$('save').addEventListener('click', save);
+$('share').addEventListener('click', share);
+</script>
+</body>
+</html>
