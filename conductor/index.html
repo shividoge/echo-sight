@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>Echo Sight Conductor</title>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #171b22; --line: #2a303a; --text: #e8ebf0; --muted: #9aa3b0;
+    --accent: #4cc2ff; --go: #2fbf71; --stop: #e5484d; --warn: #f5a524;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f6f7f9; --panel: #ffffff; --line: #d9dde3; --text: #12161c; --muted: #5b6573;
+            --accent: #0a74b8; --go: #1d8f52; --stop: #c62f34; --warn: #a86400; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 18px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         padding: max(16px, env(safe-area-inset-top)) 16px 32px; max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 12px; letter-spacing: .02em; }
+  h1 span { color: var(--muted); font-weight: 400; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+  .reminder { border-color: var(--warn); color: var(--warn); font-weight: 600; }
+  .reminder.hidden { display: none; }
+  .counter { font: 700 clamp(72px, 26vw, 140px)/1 ui-monospace, "SF Mono", Menlo, monospace; text-align: center; font-variant-numeric: tabular-nums; }
+  .counter-label { text-align: center; color: var(--muted); margin-top: 4px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-top: 14px; }
+  .stat b { display: block; font: 600 22px/1.2 ui-monospace, "SF Mono", Menlo, monospace; font-variant-numeric: tabular-nums; }
+  .stat small { color: var(--muted); font-size: 14px; }
+  label { display: block; color: var(--muted); font-size: 15px; margin-bottom: 6px; }
+  .row { margin-bottom: 14px; }
+  .row:last-child { margin-bottom: 0; }
+  select, input[type=number] { width: 100%; font: inherit; color: var(--text); background: var(--bg);
+         border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-height: 52px; }
+  input[type=range] { width: 100%; height: 44px; accent-color: var(--accent); }
+  .vol { display: flex; justify-content: space-between; align-items: baseline; }
+  .vol b { font-variant-numeric: tabular-nums; color: var(--text); }
+  .warn { color: var(--warn); font-size: 15px; margin-top: 4px; }
+  .warn:empty { display: none; }
+  button { font: 600 20px/1 system-ui, sans-serif; border: 0; border-radius: 14px; min-height: 64px; width: 100%;
+           color: #fff; background: var(--accent); cursor: pointer; touch-action: manipulation; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.go { background: var(--go); font-size: 26px; min-height: 84px; }
+  button.stop { background: var(--stop); font-size: 26px; min-height: 84px; }
+  button.quiet { background: transparent; color: var(--text); border: 1px solid var(--line); font-size: 17px; min-height: 52px; }
+  .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  pre { font: 14px/1.4 ui-monospace, "SF Mono", Menlo, monospace; color: var(--muted); margin: 10px 0 0; white-space: pre-wrap; word-break: break-all; }
+  textarea { width: 100%; height: 120px; margin-top: 10px; font: 13px ui-monospace, monospace; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; }
+  .status { color: var(--muted); font-size: 15px; margin-top: 8px; min-height: 1.4em; }
+  .bad { color: var(--stop); }
+</style>
+</head>
+<body>
+<h1>Echo Sight <span>· chirp conductor</span></h1>
+
+<div class="panel reminder" id="reminder">Start recording on ALL phones (left, right, camera) before you press Start.</div>
+
+<div class="panel">
+  <div class="counter" id="count">0</div>
+  <div class="counter-label">chirps played</div>
+  <div class="stats">
+    <div class="stat"><small>Elapsed</small><b id="elapsed">0:00.0</b></div>
+    <div class="stat"><small>Expected count</small><b id="expected">–</b></div>
+    <div class="stat"><small>Sample rate</small><b id="rate">–</b></div>
+    <div class="stat"><small>Mode · interval</small><b id="modeShow">–</b></div>
+  </div>
+  <div class="status" id="ctxStatus"></div>
+</div>
+
+<div class="panel">
+  <div class="row">
+    <label for="mode">Mode</label>
+    <select id="mode">
+      <option value="collect">Collect: marker, then chirp every 0.5 s</option>
+      <option value="live">Live: marker, then chirp every 0.15 s</option>
+      <option value="near">Near-silent range: 17–20 kHz every 0.15 s</option>
+      <option value="single">Single: one chirp per tap</option>
+    </select>
+  </div>
+  <div class="row">
+    <label for="interval">Interval override (seconds, blank = mode default)</label>
+    <input type="number" id="interval" inputmode="decimal" min="0.02" step="0.01" placeholder="0.5">
+  </div>
+  <div class="row">
+    <div class="vol"><label for="volume">Volume</label><b id="volShow">70%</b></div>
+    <input type="range" id="volume" min="0" max="100" step="1" value="70">
+    <div class="warn" id="volWarn"></div>
+  </div>
+  <div class="buttons">
+    <button class="go" id="start">Start</button>
+    <button class="stop" id="stop" disabled>Stop</button>
+  </div>
+</div>
+
+<div class="panel">
+  <label>Chirp log</label>
+  <button class="quiet" id="copy" disabled>Copy log (JSON)</button>
+  <pre id="logTail">No chirps yet.</pre>
+  <div id="copyFallback"></div>
+  <div class="status" id="copyStatus"></div>
+</div>
+
+<div class="panel">
+  <div class="row">
+    <label for="dlMinutes">Download the exact train as WAV (48 kHz, 16-bit). Length in minutes:</label>
+    <input type="number" id="dlMinutes" inputmode="decimal" min="0.05" step="0.5" value="10">
+  </div>
+  <div class="buttons">
+    <button class="quiet" id="download">Download WAV</button>
+    <button class="quiet" id="exportJson">Export chirp JSON</button>
+  </div>
+  <div class="status" id="dlStatus">Uses the mode, interval and volume above.</div>
+</div>
+
+<script>
+'use strict';
+
+// BEGIN DSP — must match tools/make_chirp_train.py sample for sample (tools/test_chirp_match.py checks it).
+const FS = 48000;
+const FADE_FRAC = 0.05;
+const CHIRP = { f0: 20, f1: 20000, dur: 0.003 };
+const NEAR = { f0: 17000, f1: 20000, dur: 0.003 };
+const MARKER = { f0: 200, f1: 8000, dur: 1.0 };
+const MARKER_GAP_S = 0.5;
+const LEAD_S = 1.0; // silence before the marker in downloaded WAVs (lets Bluetooth speakers wake up)
+
+// Linear sweep x[n] = sin(2π(f0·t + (f1−f0)/(2T)·t²)) with a raised-cosine fade over FADE_FRAC of each end.
+function sweep(f0, f1, dur) {
+  const n = Math.round(dur * FS);
+  const fade = Math.round(FADE_FRAC * n);
+  const k = (f1 - f0) / (2 * dur);
+  const x = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const t = i / FS;
+    let v = Math.sin(2 * Math.PI * (f0 * t + k * t * t));
+    if (i < fade) v *= 0.5 * (1 - Math.cos(Math.PI * i / fade));
+    else if (i >= n - fade) v *= 0.5 * (1 - Math.cos(Math.PI * (n - 1 - i) / fade));
+    x[i] = v;
+  }
+  return x;
+}
+
+// Sample positions (at FS) of everything in a train. Times are offsets from the train start,
+// so the spacing is a whole number of samples and never accumulates rounding error.
+function trainLayout({ intervalS, chirpLen, marker, leadS, minutes }) {
+  const step = Math.round(intervalS * FS);
+  const lead = Math.round(leadS * FS);
+  const markerLen = marker ? Math.round(MARKER.dur * FS) : 0;
+  const gap = marker ? Math.round(MARKER_GAP_S * FS) : 0;
+  const first = lead + markerLen + gap;
+  const total = minutes == null ? Infinity : Math.round((leadS + minutes * 60) * FS);
+  const chirpStarts = [];
+  if (total !== Infinity) for (let s = first; s + chirpLen <= total; s += step) chirpStarts.push(s);
+  return { step, total, markerStart: marker ? lead : null, first, chirpStarts };
+}
+
+// 16-bit PCM quantization used for every WAV (same rule in Python).
+function toInt16(v) {
+  return Math.floor(Math.max(-1, Math.min(1, v)) * 32767 + 0.5);
+}
+// END DSP
+
+const MODES = {
+  collect: { label: 'Collect', chirp: CHIRP, interval: 0.5, marker: true, dlMinutes: 10, file: 'collect' },
+  live:    { label: 'Live', chirp: CHIRP, interval: 0.15, marker: true, dlMinutes: 5, file: 'live' },
+  near:    { label: 'Near-silent', chirp: NEAR, interval: 0.15, marker: true, dlMinutes: 5, file: 'nearsilent' },
+  single:  { label: 'Single', chirp: CHIRP, interval: null, marker: false, dlMinutes: null },
+};
+const LOOKAHEAD_S = 2.0;
+const TICK_MS = 200;
+const START_DELAY_S = 0.3;
+
+const $ = (id) => document.getElementById(id);
+const buffers = {};
+let ctx = null, gainNode = null, run = null, wakeLock = null, ticker = null;
+
+function modeCfg() { return MODES[$('mode').value]; }
+function volume() { return Number($('volume').value) / 100; }
+function intervalS() {
+  const v = parseFloat($('interval').value);
+  return Number.isFinite(v) && v >= 0.02 ? v : modeCfg().interval;
+}
+function chirpArray(cfg) {
+  const key = cfg === NEAR ? 'near' : cfg === MARKER ? 'marker' : 'chirp';
+  return (buffers[key + 'Arr'] ||= sweep(cfg.f0, cfg.f1, cfg.dur));
+}
+// AudioBuffers are always built at 48 kHz; if the context runs at another rate the browser resamples on playback.
+function audioBuffer(c, cfg) {
+  const arr = chirpArray(cfg);
+  const b = c.createBuffer(1, arr.length, FS);
+  b.copyToChannel(arr, 0);
+  return b;
+}
+
+function ensureContext() {
+  if (ctx) return ctx;
+  if (navigator.audioSession) { try { navigator.audioSession.type = 'playback'; } catch (e) {} } // iOS: play through the mute switch
+  const AC = window.AudioContext || window.webkitAudioContext;
+  try { ctx = new AC({ sampleRate: FS }); } catch (e) { ctx = new AC(); }
+  gainNode = ctx.createGain();
+  gainNode.gain.value = volume();
+  gainNode.connect(ctx.destination);
+  ctx.onstatechange = showCtxStatus;
+  showCtxStatus();
+  return ctx;
+}
+
+function showCtxStatus() {
+  const rate = ctx ? ctx.sampleRate : null;
+  $('rate').textContent = rate ? rate + ' Hz' : '–';
+  $('rate').className = rate && rate !== FS ? 'bad' : '';
+  let msg = '';
+  if (rate && rate !== FS) msg = `Device refused 48 kHz; the chirp is resampled to ${rate} Hz. Prefer the downloaded WAV for data collection.`;
+  if (ctx && run && ctx.state !== 'running') msg += ` Audio is ${ctx.state}. Keep this page open and the screen on.`;
+  $('ctxStatus').textContent = msg;
+  $('ctxStatus').className = 'status' + (msg ? ' bad' : '');
+}
+
+function playAt(buf, when) {
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.connect(gainNode);
+  src.start(when);
+  return src;
+}
+
+// Timer in a worker: background tabs throttle main-thread timers far harder than worker timers.
+function startTicker(fn) {
+  try {
+    const url = URL.createObjectURL(new Blob([`setInterval(() => postMessage(0), ${TICK_MS});`], { type: 'text/javascript' }));
+    const w = new Worker(url);
+    w.onmessage = fn;
+    return { stop() { w.terminate(); URL.revokeObjectURL(url); } };
+  } catch (e) {
+    const id = setInterval(fn, TICK_MS);
+    return { stop() { clearInterval(id); } };
+  }
+}
+
+async function requestWakeLock() {
+  try { wakeLock = await navigator.wakeLock.request('screen'); } catch (e) { wakeLock = null; }
+}
+document.addEventListener('visibilitychange', () => {
+  if (run && document.visibilityState === 'visible') requestWakeLock();
+});
+
+async function start() {
+  ensureContext();
+  if (ctx.state !== 'running') await ctx.resume();
+  const cfg = modeCfg();
+  if (!buffers.chirp) { buffers.chirp = audioBuffer(ctx, CHIRP); buffers.near = audioBuffer(ctx, NEAR); buffers.marker = audioBuffer(ctx, MARKER); }
+  $('reminder').classList.add('hidden');
+
+  if (cfg.interval == null) { singleChirp(); return; }
+
+  const interval = intervalS();
+  const layout = trainLayout({ intervalS: interval, chirpLen: chirpArray(cfg.chirp).length, marker: cfg.marker, leadS: 0, minutes: null });
+  const t0 = ctx.currentTime + START_DELAY_S;
+  run = {
+    t0, cfg, layout, next: 0, pending: [],
+    buf: cfg.chirp === NEAR ? buffers.near : buffers.chirp,
+    log: {
+      mode: $('mode').value, sample_rate: ctx.sampleRate, interval_s: layout.step / FS,
+      chirp: cfg.chirp, started_wall_iso: new Date().toISOString(), marker_time_s: null, chirps: [],
+    },
+  };
+  if (cfg.marker) {
+    run.markerSrc = playAt(buffers.marker, t0);
+    run.log.marker_time_s = round6(t0);
+  }
+  tick();
+  ticker = startTicker(tick);
+  requestWakeLock();
+  setRunning(true);
+}
+
+function tick() {
+  if (!run) return;
+  const horizon = ctx.currentTime + LOOKAHEAD_S;
+  for (;;) {
+    const t = run.t0 + (run.layout.first + run.next * run.layout.step) / FS;
+    if (t > horizon) break;
+    run.pending.push({ src: playAt(run.buf, t), t });
+    run.log.chirps.push({ index: run.next, audio_time_s: round6(t) });
+    run.next++;
+  }
+  const old = ctx.currentTime - 0.5;
+  while (run.pending.length && run.pending[0].t < old) run.pending.shift();
+}
+
+function stop() {
+  if (!run) return;
+  const now = ctx.currentTime;
+  for (const p of run.pending) if (p.t > now) p.src.stop();
+  run.log.chirps = run.log.chirps.filter((c) => c.audio_time_s <= now);
+  if (run.markerSrc && run.t0 > now) { run.markerSrc.stop(); run.log.marker_time_s = null; }
+  run.log.stopped_audio_time_s = round6(now);
+  ticker && ticker.stop();
+  ticker = null;
+  if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+  run.stopped = now;
+  lastLog = run.log;
+  setRunning(false);
+  render();
+}
+
+// Single mode keeps its own log so taps can be copied too.
+let lastLog = null;
+function singleChirp() {
+  const t = ctx.currentTime + 0.05;
+  playAt(buffers.chirp, t);
+  if (!lastLog || lastLog.mode !== 'single') {
+    lastLog = { mode: 'single', sample_rate: ctx.sampleRate, chirp: CHIRP, started_wall_iso: new Date().toISOString(), chirps: [] };
+  }
+  lastLog.chirps.push({ index: lastLog.chirps.length, audio_time_s: round6(t) });
+  $('count').textContent = lastLog.chirps.length;
+  $('copy').disabled = false;
+  renderLogTail(lastLog);
+}
+
+function setRunning(on) {
+  $('start').disabled = on;
+  $('stop').disabled = !on;
+  $('mode').disabled = on;
+  $('interval').disabled = on;
+  $('copy').disabled = !(run || lastLog);
+}
+
+function round6(x) { return Math.round(x * 1e6) / 1e6; }
+function fmtTime(s) {
+  if (!(s > 0)) return '0:00.0';
+  const m = Math.floor(s / 60);
+  return m + ':' + (s - m * 60).toFixed(1).padStart(4, '0');
+}
+
+function render() {
+  if (run) {
+    const now = run.stopped ?? ctx.currentTime;
+    const played = run.log.chirps.filter((c) => c.audio_time_s <= now).length;
+    const tFirst = run.t0 + run.layout.first / FS;
+    const step = run.layout.step / FS;
+    $('count').textContent = played;
+    $('elapsed').textContent = fmtTime(now - run.t0);
+    $('expected').textContent = now >= tFirst ? Math.floor((now - tFirst) / step + 1e-9) + 1 : 0;
+    renderLogTail(run.log);
+  }
+  if (run && !run.stopped) requestAnimationFrame(render);
+}
+
+function renderLogTail(log) {
+  const tail = log.chirps.slice(-4).map((c) => `#${c.index}  t=${c.audio_time_s.toFixed(6)} s`);
+  const head = log.marker_time_s != null ? [`marker  t=${log.marker_time_s.toFixed(6)} s`] : [];
+  $('logTail').textContent = (log.chirps.length > 4 ? ['…'] : head).concat(tail).join('\n') || 'No chirps yet.';
+}
+
+function showMode() {
+  const cfg = modeCfg();
+  const iv = cfg.interval == null ? 'tap' : intervalS() + ' s';
+  $('modeShow').textContent = `${cfg.label} · ${iv}`;
+  $('interval').placeholder = cfg.interval ?? '';
+  $('interval').disabled = cfg.interval == null;
+  $('start').textContent = cfg.interval == null ? 'Chirp' : 'Start';
+  $('download').disabled = cfg.interval == null;
+  if (cfg.dlMinutes) $('dlMinutes').value = cfg.dlMinutes;
+  $('dlStatus').textContent = cfg.interval == null ? 'Pick Collect, Live or Near-silent to download a train.' : 'Uses the mode, interval and volume above.';
+}
+
+function showVolume() {
+  const v = Number($('volume').value);
+  $('volShow').textContent = v + '%';
+  $('volWarn').textContent = v > 90 ? 'Above 90% the speaker or phone mics may clip, which smears the echoes.' : '';
+  if (gainNode) gainNode.gain.setValueAtTime(v / 100, ctx.currentTime);
+}
+
+async function copyLog() {
+  const log = run ? run.log : lastLog;
+  if (!log) return;
+  const text = JSON.stringify(log, null, 1);
+  $('copyFallback').innerHTML = '';
+  try {
+    await navigator.clipboard.writeText(text);
+    $('copyStatus').textContent = `Copied ${log.chirps.length} chirps.`;
+  } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.readOnly = true;
+    $('copyFallback').appendChild(ta);
+    ta.focus();
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e2) {}
+    $('copyStatus').textContent = ok ? `Copied ${log.chirps.length} chirps.` : 'Clipboard blocked: the log is selected below, copy it by hand.';
+  }
+}
+
+// Renders the same schedule offline at exactly 48 kHz, so every chirp lands on a whole sample.
+async function downloadWav() {
+  const cfg = modeCfg();
+  const minutes = parseFloat($('dlMinutes').value);
+  if (!(minutes > 0) || cfg.interval == null) return;
+  const btn = $('download');
+  btn.disabled = true;
+  $('dlStatus').textContent = 'Rendering…';
+  try {
+    const chirp = chirpArray(cfg.chirp);
+    const layout = trainLayout({ intervalS: intervalS(), chirpLen: chirp.length, marker: cfg.marker, leadS: LEAD_S, minutes });
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const off = new OAC(1, layout.total, FS);
+    const g = off.createGain();
+    g.gain.value = volume();
+    g.connect(off.destination);
+    const play = (buf, sample) => { const s = off.createBufferSource(); s.buffer = buf; s.connect(g); s.start(sample / FS); };
+    const chirpBuf = audioBuffer(off, cfg.chirp);
+    if (cfg.marker) play(audioBuffer(off, MARKER), layout.markerStart);
+    for (const s of layout.chirpStarts) play(chirpBuf, s);
+    const rendered = await off.startRendering();
+    const blob = encodeWav(rendered.getChannelData(0), FS);
+    const name = `train_${cfg.file}_${fmtMinutes(minutes)}min${$('interval').value ? '_' + layout.step / FS + 's' : ''}.wav`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    $('dlStatus').textContent = `${name}: ${layout.chirpStarts.length} chirps, first at ${(layout.first / FS).toFixed(3)} s, ${(blob.size / 1e6).toFixed(1)} MB.`;
+  } catch (e) {
+    $('dlStatus').textContent = 'Render failed: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function fmtMinutes(m) { return String(Math.round(m * 1000) / 1000); }
+
+function encodeWav(samples, rate) {
+  const dv = new DataView(new ArrayBuffer(44 + samples.length * 2));
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, 'RIFF'); dv.setUint32(4, 36 + samples.length * 2, true); str(8, 'WAVE');
+  str(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+  str(36, 'data'); dv.setUint32(40, samples.length * 2, true);
+  for (let i = 0, o = 44; i < samples.length; i++, o += 2) dv.setInt16(o, toInt16(samples[i]), true);
+  return new Blob([dv.buffer], { type: 'audio/wav' });
+}
+
+function exportJson() {
+  const out = { sample_rate: FS, fade_frac: FADE_FRAC, chirp: Array.from(chirpArray(CHIRP)), near: Array.from(chirpArray(NEAR)), marker: Array.from(chirpArray(MARKER)) };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(out)], { type: 'application/json' }));
+  a.download = 'page_chirps.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+$('start').addEventListener('click', () => { start().catch((e) => { $('ctxStatus').textContent = 'Could not start audio: ' + e.message; }); });
+$('stop').addEventListener('click', stop);
+$('copy').addEventListener('click', copyLog);
+$('download').addEventListener('click', downloadWav);
+$('exportJson').addEventListener('click', exportJson);
+$('mode').addEventListener('change', showMode);
+$('interval').addEventListener('input', showMode);
+$('volume').addEventListener('input', showVolume);
+$('start').addEventListener('click', () => requestAnimationFrame(render));
+showMode();
+showVolume();
+</script>
+</body>
+</html>
